@@ -63,20 +63,18 @@ class MLM(nn.Module):
         if self.lm_type == 'dec':
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        # Add motion tokens
+        # Add motion tokens. +3 for start, end and mask tokens in order
         self.tokenizer.add_tokens(
-            [f'<motion_id_{i}>' for i in range(self.m_codebook_size + 3)])
+            [f'<motion_id_{i}_{j}>' for i in range(self.m_codebook_size[0]) for j in range(self.m_codebook_size[1])] + 
+            ['<motion_id_som>', '<motion_id_eom>', '<motion_id_mask>'])
 
         if new_token_type == "insert":
             self.language_model.resize_token_embeddings(len(self.tokenizer))
         elif new_token_type == "mlp":
             shared = NewTokenEmb(self.language_model.shared,
                                  self.m_codebook_size + 3)
-            # lm_head = NewTokenEmb(self.language_model.lm_head,
-            #   self.m_codebook_size + 3)
             self.language_model.resize_token_embeddings(len(self.tokenizer))
             self.language_model.shared = shared
-            # self.language_model.lm_head = lm_head
 
         # Lora
         if lora:
@@ -268,12 +266,16 @@ class MLM(nn.Module):
                 max_new_tokens=max_length)
             self.tokenizer.padding_side = 'left'
 
+        print(f'language model outputs: {outputs.shape}')
+
         outputs_string = self.tokenizer.batch_decode(outputs,
                                                      skip_special_tokens=True)
-
+        
+        print(f'tokenizer outputs_string: {outputs_string[0]}')
+        
         outputs_tokens, cleaned_text = self.motion_string_to_token(
             outputs_string)
-
+        
         return outputs_tokens, cleaned_text
 
     def generate_conditional(self,
@@ -341,12 +343,15 @@ class MLM(nn.Module):
             inputs, outputs = self.template_fulfill(tasks, lengths,
                                                     motion_strings, texts,
                                                     stage)
-
+            
+            print(f'inputs: {inputs[0]}')
+            print(f'outputs: {outputs[0]}')
+            
             outputs_tokens, cleaned_text = self.generate_direct(inputs,
                                                                 max_length=128,
                                                                 num_beams=1,
                                                                 do_sample=True)
-
+            
             return outputs_tokens
 
         elif task == "m2t":
@@ -387,10 +392,12 @@ class MLM(nn.Module):
             motion_i = motion_token[i].cpu(
             ) if motion_token[i].device.type == 'cuda' else motion_token[i]
             motion_list = motion_i.tolist()[:lengths[i]]
+            
             motion_string.append(
-                (f'<motion_id_{self.m_codebook_size}>' +
-                 ''.join([f'<motion_id_{int(i)}>' for i in motion_list]) +
-                 f'<motion_id_{self.m_codebook_size + 1}>'))
+                (f'<motion_id_som>' + 
+                 ''.join([f'<motion_id_{int(i)}_{int(j)}>' for [i, j] in motion_list]) +
+                 f'<motion_id_eom>'))
+
         return motion_string
 
     def motion_token_list_to_string(self, motion_token: Tensor):
@@ -399,31 +406,53 @@ class MLM(nn.Module):
             motion_i = motion_token[i].cpu(
             ) if motion_token[i].device.type == 'cuda' else motion_token[i]
             motion_list = motion_i.tolist()
+
             motion_string.append(
-                (f'<motion_id_{self.m_codebook_size}>' +
-                 ''.join([f'<motion_id_{int(i)}>' for i in motion_list]) +
-                 f'<motion_id_{self.m_codebook_size + 1}>'))
+                (f'<motion_id_som>' + 
+                 ''.join([f'<motion_id_{int(i)}_{int(j)}>' for [i, j] in motion_list]) +
+                 f'<motion_id_eom>'))
+
         return motion_string
+
+    def clean_motion_string(self, motion_string: List[str]):
+
+        motion_string_split = motion_string.split('><')
+        motion_string_cleaned = []
+
+        for i in range(len(motion_string_split)):
+            if i == 0 or i == len(motion_string_split) - 1:
+                motion_string_cleaned.append(motion_string_split[i])
+            else:
+                if '<' in motion_string_split[i] or '>' in motion_string_split[i]:
+                    motion_string_replaced = motion_string_split[i].replace('<', ' ').replace('>', ' ')
+                    for string in motion_string_replaced.split():
+                        if 'motion' in string:
+                            motion_string_cleaned.append(string)
+
+        return '><'.join(motion_string_cleaned)
 
     def motion_string_to_token(self, motion_string: List[str]):
         motion_tokens = []
         output_string = []
         for i in range(len(motion_string)):
             string = self.get_middle_str(
-                motion_string[i], f'<motion_id_{self.m_codebook_size}>',
-                f'<motion_id_{self.m_codebook_size + 1}>')
+                motion_string[i], f'<motion_id_som>',
+                f'<motion_id_eom>')
             string_list = string.split('><')
             token_list = [
-                int(i.split('_')[-1].replace('>', ''))
+                [int(i.split('_')[-2].replace('>', '')), int(i.split('_')[-1].replace('>', ''))]
                 for i in string_list[1:-1]
             ]
             if len(token_list) == 0:
-                token_list = [0]
+                token_list = [[0, 0]]
             token_list_padded = torch.tensor(token_list,
                                              dtype=int).to(self.device)
             motion_tokens.append(token_list_padded)
             output_string.append(motion_string[i].replace(
                 string, '<Motion_Placeholder>'))
+        
+        print(f'motion_tokens: {motion_tokens[0]}')
+        print(f'motion_tokens shape: {motion_tokens[0].shape}')
 
         return motion_tokens, output_string
 
@@ -439,13 +468,13 @@ class MLM(nn.Module):
         
         motion_predict_head = '>'.join(
             motion_splited[:predict_head]
-        ) + f'><motion_id_{self.m_codebook_size+1}>'
-        motion_predict_last = f'<motion_id_{self.m_codebook_size}>' + '>'.join(
+        ) + f'><motion_id_eom>'
+        motion_predict_last = f'<motion_id_som>' + '>'.join(
             motion_splited[predict_head:])
 
         motion_masked = '>'.join(
             motion_splited[:masked_head]
-        ) + '>' + f'<motion_id_{self.m_codebook_size+2}>' * (
+        ) + '>' + f'<motion_id_mask>' * (
             masked_tail - masked_head) + '>'.join(motion_splited[masked_tail:])
 
         if random.random() < self.quota_ratio:
@@ -490,10 +519,10 @@ class MLM(nn.Module):
                 startIndex += len(startStr)
             endIndex = content.index(endStr)
         except:
-            return f'<motion_id_{self.m_codebook_size}><motion_id_0><motion_id_{self.m_codebook_size+1}>'
+            return f'<motion_id_som><motion_id_0_0><motion_id_eom>'
 
-        return f'<motion_id_{self.m_codebook_size}>' + content[
-            startIndex:endIndex] + f'<motion_id_{self.m_codebook_size+1}>'
+        return f'<motion_id_som>' + content[
+            startIndex:endIndex] + f'<motion_id_eom>'
 
     def random_spans_noise_mask(self, length):
         # From https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py

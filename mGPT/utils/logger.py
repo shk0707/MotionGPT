@@ -12,15 +12,31 @@ def create_logger(cfg, phase='train'):
     if not root_output_dir.exists():
         print('=> creating {}'.format(root_output_dir))
         root_output_dir.mkdir()
-
-    cfg_name = cfg.NAME
-    model = cfg.model.target.split('.')[-2]
-    cfg_name = os.path.basename(cfg_name).split('.')[0]
-
-    final_output_dir = root_output_dir / model / cfg_name
-    cfg.FOLDER_EXP = str(final_output_dir)
-
+    
     time_str = time.strftime('%Y-%m-%d-%H-%M-%S')
+
+    if phase == 'test':
+        cfg_name = cfg.NAME
+        model = cfg.model.target.split('.')[-2]
+        cfg_name = cfg.TEST.CHECKPOINTS.split('/')
+        if len(cfg_name) == 3:
+            cfg_name = cfg_name[-1]
+        else:
+            cfg_name = cfg_name[2]
+        
+        model_name = cfg.TEST.CHECKPOINTS.split('/')[-1].split('.')[0]
+        final_output_dir = root_output_dir / model / cfg_name / model_name
+
+    else:
+        cfg_name = cfg.NAME
+        model = cfg.model.target.split('.')[-2]
+        cfg_name = os.path.basename(cfg_name).split('.')[0]
+    
+        final_output_dir = root_output_dir / model / cfg_name
+
+        final_output_dir = Path(str(final_output_dir) + '_' + str(time_str))
+
+    cfg.FOLDER_EXP = str(final_output_dir)
 
     new_dir(cfg, phase, time_str, final_output_dir)
 

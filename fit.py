@@ -39,7 +39,8 @@ parser.add_argument(
     default=100,
     help="num of smplify iters"  # 100
 )
-parser.add_argument("--cuda", type=bool, default=True, help="enables cuda")
+# parser.add_argument("--cuda", type=bool, default=True, help="enables cuda")
+parser.add_argument("--cuda", action="store_true", help='enables cuda')
 parser.add_argument("--gpu_ids", type=int, default=0, help="choose gpu ids")
 parser.add_argument("--num_joints", type=int, default=22, help="joint number")
 parser.add_argument("--joint_category",

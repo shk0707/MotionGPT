@@ -23,6 +23,7 @@ class BaseModel(LightningModule):
 
     def training_step(self, batch, batch_idx):
         return self.allsplit_step("train", batch, batch_idx)
+        # return None
 
     def validation_step(self, batch, batch_idx):
         return self.allsplit_step("val", batch, batch_idx)
@@ -143,22 +144,26 @@ class BaseModel(LightningModule):
 
     def save_npy(self, outputs):
         cfg = self.hparams.cfg
-        output_dir = Path(
-            os.path.join(
-                cfg.FOLDER,
-                str(cfg.model.target.split('.')[-2].lower()),
-                str(cfg.NAME),
-                "samples_" + cfg.TIME,
-            ))
+        # output_dir = Path(
+        #     os.path.join(
+        #         cfg.FOLDER,
+        #         str(cfg.model.target.split('.')[-2].lower()),
+        #         str(cfg.NAME),
+        #         "samples_" + cfg.TIME,
+        #     ))
+        output_dir = Path(os.path.join(str(cfg.FOLDER_EXP), "samples"))
+
         if cfg.TEST.SAVE_PREDICTIONS:
             lengths = [i[1] for i in outputs]
             outputs = [i[0] for i in outputs]
+
+            num_saved = 0
 
             if cfg.TEST.DATASETS[0].lower() in ["humanml3d", "kit"]:
                 keyids = self.trainer.datamodule.test_dataset.name_list
                 for i in range(len(outputs)):
                     for bid in range(
-                            min(cfg.TEST.BATCH_SIZE, outputs[i].shape[0])):
+                            min(cfg.TEST.BATCH_SIZE, outputs[i].shape[0], 5)):
                         keyid = keyids[i * cfg.TEST.BATCH_SIZE + bid]
                         data = self.trainer.datamodule.test_dataset.data_dict[
                             keyid]
@@ -184,6 +189,11 @@ class BaseModel(LightningModule):
                         with open(output_dir / f"{keyid}.txt", "a") as f:
                             for text in text_list:
                                 f.write(f"{text['caption']}\n")
+
+                        num_saved += 1
+
+                        if num_saved > cfg.TEST.NUM_PREDICTIONS:
+                            break
 
             elif cfg.TEST.DATASETS[0].lower() in ["humanact12", "uestc"]:
                 keyids = range(len(self.trainer.datamodule.test_dataset))

@@ -42,23 +42,23 @@ def getCheckpointCallback(cfg, logger=None, **kwargs):
     callbacks.append(
         progressLogger(logger,metric_monitor=metric_monitor,log_every_n_steps=1))
 
-    # Save 10 latest checkpoints
+    # Save 3 latest checkpoints
     checkpointParams = {
         'dirpath': os.path.join(cfg.FOLDER_EXP, "checkpoints"),
         'filename': "{epoch}",
         'monitor': "step",
         'mode': "max",
         'every_n_epochs': cfg.LOGGER.VAL_EVERY_STEPS,
-        'save_top_k': 8,
+        'save_top_k': 3,
         'save_last': True,
         'save_on_train_epoch_end': True
     }
     callbacks.append(ModelCheckpoint(**checkpointParams))
 
-    # Save checkpoint every n*10 epochs
+    # Save checkpoint every n*100 epochs
     checkpointParams.update({
         'every_n_epochs':
-        cfg.LOGGER.VAL_EVERY_STEPS * 10,
+        cfg.LOGGER.VAL_EVERY_STEPS * 100,
         'save_top_k':
         -1,
         'save_last':

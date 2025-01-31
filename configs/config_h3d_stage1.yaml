@@ -1,7 +1,7 @@
 NAME: VQVAE_HumanML3D # Experiment names
 ACCELERATOR: 'gpu' # Devices optioncal: “cpu”, “gpu”, “tpu”, “ipu”, “hpu”, “mps, “auto”
 NUM_NODES: 1 # Number of GPU nodes for distributed training
-DEVICE: [0] # Index of gpus eg. [0] or [0,1,2,3]
+DEVICE: [0, 1] # Index of gpus eg. [0] or [0,1,2,3]
 
 TRAIN:
   #---------------------------------
@@ -11,6 +11,8 @@ TRAIN:
   BATCH_SIZE: 256 # Size of batches
   END_EPOCH: 999999 # End epoch
   RESUME: '' # Resume training from this path
+  # RESUME: experiments/mgpt/VQVAE_HumanML3D_2025-01-14-19-22-47 # Resume training from this path
+  # PRETRAINED: experiments/mgpt/VQVAE_HumanML3D_2024-12-15-17-49-26/checkpoints/epoch=2999-v1.ckpt # Preatrained model path
   PRETRAINED: '' # Preatrained model path
 
   OPTIM:
@@ -26,9 +28,11 @@ EVAL:
   SPLIT: test
 
 TEST:
-  CHECKPOINTS: checkpoints/MotionGPT-base/motiongpt_s3_h3d.tar
+  # CHECKPOINTS: checkpoints/MotionGPT-base/motiongpt_s3_h3d.tar
+  CHECKPOINTS: experiments/mgpt/VQVAE_HumanML3D_2025-01-08-12-19-29/checkpoints/epoch=2999-v1.ckpt
   SPLIT: test
   BATCH_SIZE: 32 # training Batch size
+  DATASETS: ['HumanML3D']
 
 DATASET:
   target: mGPT.data.HumanML3D.HumanML3DDataModule
@@ -57,4 +61,4 @@ LOGGER:
   VAL_EVERY_STEPS: 10
   WANDB:
     params:
-      project: motiongpt
+      project: Motion-Language

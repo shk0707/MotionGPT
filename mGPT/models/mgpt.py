@@ -58,9 +58,9 @@ class MotionGPT(BaseModel):
         # Data transform
         self.feats2joints = datamodule.feats2joints
 
-        # Count codebook frequency
-        self.codePred = []
-        self.codeFrequency = torch.zeros((self.hparams.codebook_size, ))
+        # # Count codebook frequency
+        # self.codePred = []
+        # self.codeFrequency = torch.zeros((self.hparams.codebook_size, ))
 
     def forward(self, batch, task="t2m"):
         texts = batch["text"]
@@ -172,15 +172,21 @@ class MotionGPT(BaseModel):
         feats_rst = torch.zeros_like(feats_ref)
 
         for i in range(len(texts)):
-            outputs[i] = torch.clamp(outputs[i],
+            print(f'outputs[i] shape: {outputs[i].shape}')
+            outputs[i][:, 0] = torch.clamp(outputs[i][:, 0],
                                      0,
-                                     self.hparams.codebook_size - 1,
+                                     self.hparams.codebook_size[0] - 1,
+                                     out=None)
+            outputs[i][:, 1] = torch.clamp(outputs[i][:, 1],
+                                     0,
+                                     self.hparams.codebook_size[1] - 1,
                                      out=None)
 
             if len(outputs[i]) > 1:
                 motion = self.vae.decode(outputs[i])
             else:
                 motion = torch.zeros_like(feats_ref[i:i + 1, ...])
+
 
             min_len[i] = min(motion.shape[1], lengths[i])
 
@@ -304,16 +310,22 @@ class MotionGPT(BaseModel):
         feats_ref = batch["motion"]
         joints_ref = self.feats2joints(feats_ref)
         # motion encode & decode
-        feats_rst, loss_commit, perplexity = self.vae(feats_ref)
+        feats_rst, ubody_feats_rst, lbody_feats_rst, ubody_loss_commit, lbody_loss_commit, ubody_perplexity, lbody_perplexity = self.vae(feats_ref)
         joints_rst = self.feats2joints(feats_rst)
         # return set
         rs_set = {
             "m_ref": feats_ref,
             "joints_ref": joints_ref,
             "m_rst": feats_rst,
+            "um_rst": ubody_feats_rst,
+            "lm_rst": lbody_feats_rst,
             "joints_rst": joints_rst,
-            "loss_commit": loss_commit,
-            "perplexity": perplexity,
+            "loss_commit": ubody_loss_commit + lbody_loss_commit,
+            "loss_commit_ubody": ubody_loss_commit,
+            "loss_commit_lbody": lbody_loss_commit,
+            "perplexity": ubody_perplexity + lbody_perplexity,
+            "perplexity_ubody": ubody_perplexity,
+            "perplexity_lbody": lbody_perplexity,
         }
         return rs_set
 
@@ -335,19 +347,8 @@ class MotionGPT(BaseModel):
         for i in range(len(feats_ref)):
             if lengths[i] == 0:
                 continue
-            feats_pred, _, _ = self.vae(feats_ref[i:i + 1, :lengths[i]])
+            feats_pred, _, _, _, _, _, _ = self.vae(feats_ref[i:i + 1, :lengths[i]])
             feats_rst[i:i + 1, :feats_pred.shape[1], :] = feats_pred
-
-            code_pred, _ = self.vae.encode(feats_ref[i:i + 1, :lengths[i]])
-
-            # codeFre_pred = torch.bincount(code_pred[0],
-            #                               minlength=self.hparams.codebook_size).to(
-            #                                   self.codeFrequency.device)
-            # self.codePred.append(code_pred[0])
-            # self.codeFrequency += codeFre_pred
-
-        # np.save('../memData/results/codeFrequency.npy',
-        #         self.codeFrequency.cpu().numpy())
 
         # Recover joints for evaluation
         joints_ref = self.feats2joints(feats_ref)
@@ -414,7 +415,7 @@ class MotionGPT(BaseModel):
                                                rs_set["joints_ref"], lengths)
                     elif metric == "TM2TMetrics":
                         if self.hparams.stage in [
-                                "lm_instruct", "lm_pretrain", "lm_rl"
+                                "lm_instruct", "lm_pretrain", "lm_rl", "vae"
                         ]:
                             word_embs = batch['word_embs']
                             pos_ohot = batch['pos_ohot']

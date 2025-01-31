@@ -1,4 +1,7 @@
 from os.path import join as pjoin
+import sys
+sys.path.append('..')
+sys.path.append('../../../utils')
 
 from ..common.skeleton import Skeleton
 import numpy as np
@@ -8,6 +11,9 @@ from ..utils.paramUtil import *
 
 import torch
 from tqdm import tqdm
+
+# import articulate as art
+
 
 # positions (batch, joint_num, 3)
 def uniform_skeleton(positions, target_offset):
@@ -195,12 +201,17 @@ def process_file(positions, feet_thre):
     across1 = root_pos_init[r_hip] - root_pos_init[l_hip]
     across2 = root_pos_init[sdr_r] - root_pos_init[sdr_l]
     across = across1 + across2
+    print(f'across: {across}')
     across = across / np.sqrt((across ** 2).sum(axis=-1))[..., np.newaxis]
+
+    print(f'across: {across}')
 
     # forward (3,), rotate around y-axis
     forward_init = np.cross(np.array([[0, 1, 0]]), across, axis=-1)
     # forward (3,)
     forward_init = forward_init / np.sqrt((forward_init ** 2).sum(axis=-1))[..., np.newaxis]
+    
+    print(f'forward_init: {forward_init}')
 
     #     print(forward_init)
 
@@ -208,9 +219,13 @@ def process_file(positions, feet_thre):
     root_quat_init = qbetween_np(forward_init, target)
     root_quat_init = np.ones(positions.shape[:-1] + (4,)) * root_quat_init
 
+    print(f'root_quat_init: {root_quat_init}')
+
     positions_b = positions.copy()
 
     positions = qrot_np(root_quat_init, positions)
+
+    print(f'positions: {positions}')
 
     #     plot_3d_motion("./positions_2.mp4", kinematic_chain, positions, 'title', fps=20)
 
@@ -478,52 +493,80 @@ if __name__ == "__main__":
           (len(source_list), frame_num, frame_num / 20 / 60))
 '''
 
-if __name__ == "__main__":
-    example_id = "03950_gt"
-    # Lower legs
-    l_idx1, l_idx2 = 17, 18
-    # Right/Left foot
-    fid_r, fid_l = [14, 15], [19, 20]
-    # Face direction, r_hip, l_hip, sdr_r, sdr_l
-    face_joint_indx = [11, 16, 5, 8]
-    # l_hip, r_hip
-    r_hip, l_hip = 11, 16
-    joints_num = 21
-    # ds_num = 8
-    data_dir = '../dataset/kit_mocap_dataset/joints/'
-    save_dir1 = '../dataset/kit_mocap_dataset/new_joints/'
-    save_dir2 = '../dataset/kit_mocap_dataset/new_joint_vecs/'
+# if __name__ == "__main__":
+#     example_id = "000021"
+#     # Lower legs
+#     l_idx1, l_idx2 = 5, 8
+#     # Right/Left foot
+#     fid_r, fid_l = [8, 11], [7, 10]
+#     # Face direction, r_hip, l_hip, sdr_r, sdr_l
+#     face_joint_indx = [2, 1, 17, 16]
+#     # l_hip, r_hip
+#     r_hip, l_hip = 2, 1
+#     joints_num = 22
+#     # ds_num = 8
+#     data_dir = '../../../../datasets/humanml3d/joints'
+#     save_dir1 = '../../../../datasets/humanml3d/new_joints'
+#     save_dir2 = '../../../../datasets/humanml3d/new_joint_vecs'
 
-    n_raw_offsets = torch.from_numpy(kit_raw_offsets)
-    kinematic_chain = kit_kinematic_chain
+#     n_raw_offsets = torch.from_numpy(kit_raw_offsets)
+#     kinematic_chain = kit_kinematic_chain
 
-    '''Get offsets of target skeleton'''
-    example_data = np.load(os.path.join(data_dir, example_id + '.npy'))
-    example_data = example_data.reshape(len(example_data), -1, 3)
-    example_data = torch.from_numpy(example_data)
-    tgt_skel = Skeleton(n_raw_offsets, kinematic_chain, 'cpu')
-    # (joints_num, 3)
-    tgt_offsets = tgt_skel.get_offsets_joints(example_data[0])
-    # print(tgt_offsets)
+#     '''Get offsets of target skeleton'''
+#     example_data = np.load(os.path.join(data_dir, example_id + '.npy'))
+#     example_data = example_data.reshape(len(example_data), -1, 3)
+#     example_data = torch.from_numpy(example_data)
+#     tgt_skel = Skeleton(n_raw_offsets, kinematic_chain, 'cpu')
+#     # (joints_num, 3)
+#     tgt_offsets = tgt_skel.get_offsets_joints(example_data[0])
+#     # print(tgt_offsets)
 
-    source_list = os.listdir(data_dir)
-    frame_num = 0
-    '''Read source dataset'''
-    for source_file in tqdm(source_list):
-        source_data = np.load(os.path.join(data_dir, source_file))[:, :joints_num]
-        try:
-            name = ''.join(source_file[:-7].split('_')) + '.npy'
-            data, ground_positions, positions, l_velocity = process_file(source_data, 0.05)
-            rec_ric_data = recover_from_ric(torch.from_numpy(data).unsqueeze(0).float(), joints_num)
-            if np.isnan(rec_ric_data.numpy()).any():
-                print(source_file)
-                continue
-            np.save(pjoin(save_dir1, name), rec_ric_data.squeeze().numpy())
-            np.save(pjoin(save_dir2, name), data)
-            frame_num += data.shape[0]
-        except Exception as e:
-            print(source_file)
-            print(e)
+#     smpl_model = art.ParametricModel('/export/home_c/shkoh/MotionGPT/deps/smpl_models/smpl/SMPL_MALE.pkl')
 
-    print('Total clips: %d, Frames: %d, Duration: %fm' %
-          (len(source_list), frame_num, frame_num / 12.5 / 60))
+#     source_list = os.listdir(data_dir)
+#     frame_num = 0
+#     '''Read source dataset'''
+#     for source_file in tqdm(source_list):
+        
+#         source_data = np.load(os.path.join(data_dir, source_file))[:, :joints_num]
+#         name = ''.join(source_file[:-7].split('_')) + '.npy'
+#         data, ground_positions, positions, l_velocity = process_file(source_data, 0.05)
+#         print(data)
+#         exit()
+
+        # try:
+        #     name = ''.join(source_file[:-7].split('_')) + '.npy'
+        #     data, ground_positions, positions, l_velocity = process_file(source_data, 0.05)
+        #     rec_ric_data = recover_from_ric(torch.from_numpy(data).unsqueeze(0).float(), joints_num)
+        #     if np.isnan(rec_ric_data.numpy()).any():
+        #         print(source_file)
+        #         continue
+        #     np.save(pjoin(save_dir1, name), rec_ric_data.squeeze().numpy())
+        #     np.save(pjoin(save_dir2, name), data)
+        #     frame_num += data.shape[0]
+        # except Exception as e:
+        #     print(source_file)
+        #     print(e)
+
+        # source_data = np.zeros((3, 24, 3))
+        # source_data = torch.from_numpy(source_data).float()
+        # trans_matrix = torch.tensor([[1.0, 0.0, 0.0],
+        #                     [0.0, 0.0, 1.0],
+        #                     [0.0, 1.0, 0.0]])
+
+        # source_data = art.math.axis_angle_to_rotation_matrix(source_data).view(3, 24, 3, 3)
+
+        # source_data[:, 0] = trans_matrix.matmul(source_data[:, 0])
+
+        # pose, joint = smpl_model.forward_kinematics(source_data)
+
+        
+        # source_data = joint[:, :joints_num].numpy()
+        # source_data = np.dot(source_data, trans_matrix)
+
+        # name = ''.join(source_file[:-7].split('_')) + '.npy'
+        # data, ground_positions, positions, l_velocity = process_file(source_data, 0.05)
+        # exit()
+
+    # print('Total clips: %d, Frames: %d, Duration: %fm' %
+    #       (len(source_list), frame_num, frame_num / 12.5 / 60))

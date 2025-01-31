@@ -47,9 +47,10 @@ def main():
     logger.info(OmegaConf.to_yaml(cfg))
 
     # Output dir
-    model_name = cfg.model.target.split('.')[-2].lower()
-    output_dir = Path(
-        os.path.join(cfg.FOLDER, model_name, cfg.NAME, "samples_" + cfg.TIME))
+    # model_name = cfg.model.target.split('.')[-2].lower()
+    # output_dir = Path(
+    #     os.path.join(cfg.FOLDER, model_name, cfg.NAME, "samples_" + cfg.TIME))
+    output_dir = Path(os.path.join(cfg.FOLDER_EXP, "samples"))
     if cfg.TEST.SAVE_PREDICTIONS:
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Saving predictions to {str(output_dir)}")
@@ -100,7 +101,7 @@ def main():
 
     # Calculate metrics
     all_metrics = {}
-    replication_times = cfg.TEST.REPLICATION_TIMES
+    replication_times = cfg.TEST.REPLICATION_TIMES if not cfg.TEST.SAVE_PREDICTIONS else 1
 
     for i in range(replication_times):
         metrics_type = ", ".join(cfg.METRIC.TYPE)

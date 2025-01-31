@@ -36,7 +36,8 @@ TEST:
   BATCH_SIZE: 16 # Testing Batch size
   NUM_WORKERS: 8 # Testing Batch size
 
-  SAVE_PREDICTIONS: False # Weather to save predictions
+  SAVE_PREDICTIONS: True # Weather to save predictions
+  NUM_PREDICTIONS: 3
   COUNT_TIME: False # Weather to count time during test
   REPLICATION_TIMES: 20 # Number of times to replicate the test
   REP_I: 0 # For counting replication times
