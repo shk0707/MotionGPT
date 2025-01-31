@@ -4,5 +4,5 @@ deps/
 experiments/
 results/
 
-**.pyc
+**/*.pyc
 **/__pycache__/
