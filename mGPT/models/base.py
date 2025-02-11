@@ -158,6 +158,7 @@ class BaseModel(LightningModule):
             outputs = [i[0] for i in outputs]
 
             num_saved = 0
+            done = False
 
             if cfg.TEST.DATASETS[0].lower() in ["humanml3d", "kit"]:
                 keyids = self.trainer.datamodule.test_dataset.name_list
@@ -193,7 +194,10 @@ class BaseModel(LightningModule):
                         num_saved += 1
 
                         if num_saved > cfg.TEST.NUM_PREDICTIONS:
+                            done = True
                             break
+                    if done:
+                        break
 
             elif cfg.TEST.DATASETS[0].lower() in ["humanact12", "uestc"]:
                 keyids = range(len(self.trainer.datamodule.test_dataset))

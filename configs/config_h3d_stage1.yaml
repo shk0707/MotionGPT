@@ -29,7 +29,7 @@ EVAL:
 
 TEST:
   # CHECKPOINTS: checkpoints/MotionGPT-base/motiongpt_s3_h3d.tar
-  CHECKPOINTS: experiments/mgpt/VQVAE_HumanML3D_2025-01-08-12-19-29/checkpoints/epoch=2999-v1.ckpt
+  CHECKPOINTS: experiments/mgpt/VQVAE_HumanML3D_2025-01-20-04-10-17/checkpoints/epoch=2999-v1.ckpt
   SPLIT: test
   BATCH_SIZE: 32 # training Batch size
   DATASETS: ['HumanML3D']

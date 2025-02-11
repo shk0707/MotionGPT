@@ -42,47 +42,16 @@ class VQVae(nn.Module):
         self.ubody_nfeats = UBODY_nfeats
         self.lbody_nfeats = LBODY_nfeats
 
-        self.ubody_encoder = Encoder(self.ubody_nfeats,
-                               output_emb_width,
-                               down_t,
-                               stride_t,
-                               width,
-                               depth,
-                               dilation_growth_rate,
-                               activation=activation,
-                               norm=norm)
-        self.lbody_encoder = Encoder(self.lbody_nfeats,
-                               output_emb_width,
-                               down_t,
-                               stride_t,
-                               width,
-                               depth,
-                               dilation_growth_rate,
-                               activation=activation,
-                               norm=norm)
-        
-
-        self.ubody_decoder = Decoder(self.ubody_nfeats,
-                               output_emb_width,
-                               down_t,
-                               stride_t,
-                               width,
-                               depth,
-                               dilation_growth_rate,
-                               activation=activation,
-                               norm=norm)
-        self.lbody_decoder = Decoder(self.lbody_nfeats,
-                               output_emb_width,
-                               down_t,
-                               stride_t,
-                               width,
-                               depth,
-                               dilation_growth_rate,
-                               activation=activation,
-                               norm=norm)
-
-
-        # self.encoder = Encoder((self.ubody_nfeats, self.lbody_nfeats),
+        # self.ubody_encoder = Encoder(self.ubody_nfeats,
+        #                        output_emb_width,
+        #                        down_t,
+        #                        stride_t,
+        #                        width,
+        #                        depth,
+        #                        dilation_growth_rate,
+        #                        activation=activation,
+        #                        norm=norm)
+        # self.lbody_encoder = Encoder(self.lbody_nfeats,
         #                        output_emb_width,
         #                        down_t,
         #                        stride_t,
@@ -92,15 +61,46 @@ class VQVae(nn.Module):
         #                        activation=activation,
         #                        norm=norm)
         
-        # self.decoder = Decoder((self.ubody_nfeats, self.lbody_nfeats),
-        #                          output_emb_width,
-        #                          down_t,
-        #                          stride_t,
-        #                          width,
-        #                          depth,
-        #                          dilation_growth_rate,
-        #                          activation=activation,
-        #                          norm=norm)
+
+        # self.ubody_decoder = Decoder(self.ubody_nfeats,
+        #                        output_emb_width,
+        #                        down_t,
+        #                        stride_t,
+        #                        width,
+        #                        depth,
+        #                        dilation_growth_rate,
+        #                        activation=activation,
+        #                        norm=norm)
+        # self.lbody_decoder = Decoder(self.lbody_nfeats,
+        #                        output_emb_width,
+        #                        down_t,
+        #                        stride_t,
+        #                        width,
+        #                        depth,
+        #                        dilation_growth_rate,
+        #                        activation=activation,
+        #                        norm=norm)
+
+
+        self.encoder = Encoder((self.ubody_nfeats, self.lbody_nfeats),
+                               output_emb_width,
+                               down_t,
+                               stride_t,
+                               width,
+                               depth,
+                               dilation_growth_rate,
+                               activation=activation,
+                               norm=norm)
+        
+        self.decoder = Decoder((self.ubody_nfeats, self.lbody_nfeats),
+                                 output_emb_width,
+                                 down_t,
+                                 stride_t,
+                                 width,
+                                 depth,
+                                 dilation_growth_rate,
+                                 activation=activation,
+                                 norm=norm)
 
         self.body_part_merge = nn.Linear(self.ubody_nfeats + self.lbody_nfeats, nfeats)
 
@@ -141,18 +141,18 @@ class VQVae(nn.Module):
         ux_in, lx_in = self.preprocess(features)
 
         # Encode
-        ux_encoder = self.ubody_encoder(ux_in)
-        lx_encoder = self.lbody_encoder(lx_in)
-        # ux_encoder, lx_encoder = self.encoder(ux_in, lx_in)
+        # ux_encoder = self.ubody_encoder(ux_in)
+        # lx_encoder = self.lbody_encoder(lx_in)
+        ux_encoder, lx_encoder = self.encoder(ux_in, lx_in)
 
         # quantization
         ux_quantized, ubody_loss, ubody_perplexity = self.ubody_quantizer(ux_encoder)
         lx_quantized, lbody_loss, lbody_perplexity = self.lbody_quantizer(lx_encoder)
 
         # decoder
-        ux_decoder = self.ubody_decoder(ux_quantized)
-        lx_decoder = self.lbody_decoder(lx_quantized)
-        # ux_decoder, lx_decoder = self.decoder(ux_quantized, lx_quantized)
+        # ux_decoder = self.ubody_decoder(ux_quantized)
+        # lx_decoder = self.lbody_decoder(lx_quantized)
+        ux_decoder, lx_decoder = self.decoder(ux_quantized, lx_quantized)
         ux_out = self.postprocess(ux_decoder) # (bs, T, self.ubody_nfeats)
         lx_out = self.postprocess(lx_decoder) # (bs, T, self.lbody_nfeats)
 
@@ -251,48 +251,10 @@ class VQVae(nn.Module):
 
         return x_out
 
-class Encoder(nn.Module):
-
-    def __init__(self,
-                 input_emb_width=3,
-                 output_emb_width=512,
-                 down_t=3,
-                 stride_t=2,
-                 width=512,
-                 depth=3,
-                 dilation_growth_rate=3,
-                 activation='relu',
-                 norm=None):
-        super().__init__()
-
-        blocks = []
-        filter_t, pad_t = stride_t * 2, stride_t // 2
-        blocks.append(nn.Conv1d(input_emb_width, width, 3, 1, 1))
-        blocks.append(nn.ReLU())
-
-        for i in range(down_t):
-            input_dim = width
-            block = nn.Sequential(
-                nn.Conv1d(input_dim, width, filter_t, stride_t, pad_t),
-                Resnet1D(width,
-                         depth,
-                         dilation_growth_rate,
-                         activation=activation,
-                         norm=norm),
-            )
-            blocks.append(block)
-        blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
-        self.model = nn.Sequential(*blocks)
-
-    def forward(self, x):
-        x = self.model(x)
-        return x
-    
-
 # class Encoder(nn.Module):
 
 #     def __init__(self,
-#                  input_emb_width=(UBODY_nfeats, LBODY_nfeats),
+#                  input_emb_width=3,
 #                  output_emb_width=512,
 #                  down_t=3,
 #                  stride_t=2,
@@ -303,19 +265,14 @@ class Encoder(nn.Module):
 #                  norm=None):
 #         super().__init__()
 
+#         blocks = []
 #         filter_t, pad_t = stride_t * 2, stride_t // 2
-
-#         self.max_embed_width = max(input_emb_width)
-#         self.gcn_out_dim = output_emb_width
-#         self.lbody_upsample = nn.Conv1d(input_emb_width[1], self.max_embed_width, 3, 1, 1)
-#         self.gcn = GCNConv(self.max_embed_width, width)
-#         self.edge_idx = torch.tensor([[0, 1], [1, 0]])
-
-#         ubody_blocks, lbody_blocks = [], []
+#         blocks.append(nn.Conv1d(input_emb_width, width, 3, 1, 1))
+#         blocks.append(nn.ReLU())
 
 #         for i in range(down_t):
 #             input_dim = width
-#             ubody_block = nn.Sequential(
+#             block = nn.Sequential(
 #                 nn.Conv1d(input_dim, width, filter_t, stride_t, pad_t),
 #                 Resnet1D(width,
 #                          depth,
@@ -323,62 +280,19 @@ class Encoder(nn.Module):
 #                          activation=activation,
 #                          norm=norm),
 #             )
-#             ubody_blocks.append(ubody_block)
+#             blocks.append(block)
+#         blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
+#         self.model = nn.Sequential(*blocks)
 
-#             lbody_block = nn.Sequential(
-#                 nn.Conv1d(input_dim, width, filter_t, stride_t, pad_t),
-#                 Resnet1D(width,
-#                          depth,
-#                          dilation_growth_rate,
-#                          activation=activation,
-#                          norm=norm),
-#             )
-#             lbody_blocks.append(lbody_block)
-        
-#         ubody_blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
-#         lbody_blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
-        
-#         self.ubody_model = nn.Sequential(*ubody_blocks)
-#         self.lbody_model = nn.Sequential(*lbody_blocks)
+#     def forward(self, x):
+#         x = self.model(x)
+#         return x
+    
 
-
-#     def forward(self, ux, lx):
-
-#         # ux: (bs, 163, T), lx: (bs, 107, T)
-
-#         lx = self.lbody_upsample(lx) # (bs, 163, T)
-
-#         x = torch.cat([ux.unsqueeze(1), lx.unsqueeze(1)], dim=1) # (bs, 2, 163, T)
-
-#         bs, _, n, t = x.shape
-
-#         gcn_out = []
-#         for i in range(t):
-#             x_t = x[:, :, :, i]
-#             x_t = x_t.view(-1, n)
-#             try:
-#                 x_t = self.gcn(x_t, self.edge_idx)
-#             except:
-#                 self.gcn.to(x_t.device)
-#                 self.edge_idx = self.edge_idx.to(x_t.device)
-#                 x_t = self.gcn(x_t, self.edge_idx)
-
-#             gcn_out.append(x_t.view(bs, 2, self.gcn_out_dim))
-        
-#         gcn_out = torch.stack(gcn_out, dim=-1) # (bs, 2, 512, T)
-
-#         ux, lx = torch.split(gcn_out, 1, dim=1) # (bs, 1, 512, T)
-
-#         ux = self.ubody_model(ux.squeeze(1)) # (bs, 512, T/4)
-#         lx = self.lbody_model(lx.squeeze(1)) # (bs, 512, T/4)
-
-#         return ux, lx
-
-
-class Decoder(nn.Module):
+class Encoder(nn.Module):
 
     def __init__(self,
-                 input_emb_width=3,
+                 input_emb_width=(UBODY_nfeats, LBODY_nfeats),
                  output_emb_width=512,
                  down_t=3,
                  stride_t=2,
@@ -388,14 +302,143 @@ class Decoder(nn.Module):
                  activation='relu',
                  norm=None):
         super().__init__()
-        blocks = []
 
         filter_t, pad_t = stride_t * 2, stride_t // 2
-        blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
-        blocks.append(nn.ReLU())
+
+        self.max_embed_width = max(input_emb_width)
+        self.gcn_out_dim = output_emb_width
+        self.lbody_upsample = nn.Conv1d(input_emb_width[1], self.max_embed_width, 3, 1, 1)
+        self.gcn = GCNConv(self.max_embed_width, width)
+        self.edge_idx = torch.tensor([[0, 1], [1, 0]])
+
+        ubody_blocks, lbody_blocks = [], []
+
+        for i in range(down_t):
+            input_dim = width
+            ubody_block = nn.Sequential(
+                nn.Conv1d(input_dim, width, filter_t, stride_t, pad_t),
+                Resnet1D(width,
+                         depth,
+                         dilation_growth_rate,
+                         activation=activation,
+                         norm=norm),
+            )
+            ubody_blocks.append(ubody_block)
+
+            lbody_block = nn.Sequential(
+                nn.Conv1d(input_dim, width, filter_t, stride_t, pad_t),
+                Resnet1D(width,
+                         depth,
+                         dilation_growth_rate,
+                         activation=activation,
+                         norm=norm),
+            )
+            lbody_blocks.append(lbody_block)
+        
+        ubody_blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
+        lbody_blocks.append(nn.Conv1d(width, output_emb_width, 3, 1, 1))
+        
+        self.ubody_model = nn.Sequential(*ubody_blocks)
+        self.lbody_model = nn.Sequential(*lbody_blocks)
+
+
+    def forward(self, ux, lx):
+
+        # ux: (bs, 163, T), lx: (bs, 107, T)
+
+        lx = self.lbody_upsample(lx) # (bs, 163, T)
+
+        x = torch.cat([ux.unsqueeze(1), lx.unsqueeze(1)], dim=1) # (bs, 2, 163, T)
+
+        bs, _, n, t = x.shape
+
+        gcn_out = []
+        for i in range(t):
+            x_t = x[:, :, :, i]
+            x_t = x_t.view(-1, n)
+            try:
+                x_t = self.gcn(x_t, self.edge_idx)
+            except:
+                self.gcn.to(x_t.device)
+                self.edge_idx = self.edge_idx.to(x_t.device)
+                x_t = self.gcn(x_t, self.edge_idx)
+
+            gcn_out.append(x_t.view(bs, 2, self.gcn_out_dim))
+        
+        gcn_out = torch.stack(gcn_out, dim=-1) # (bs, 2, 512, T)
+
+        ux, lx = torch.split(gcn_out, 1, dim=1) # (bs, 1, 512, T)
+
+        ux = self.ubody_model(ux.squeeze(1)) # (bs, 512, T/4)
+        lx = self.lbody_model(lx.squeeze(1)) # (bs, 512, T/4)
+
+        return ux, lx
+
+
+# class Decoder(nn.Module):
+
+#     def __init__(self,
+#                  input_emb_width=3,
+#                  output_emb_width=512,
+#                  down_t=3,
+#                  stride_t=2,
+#                  width=512,
+#                  depth=3,
+#                  dilation_growth_rate=3,
+#                  activation='relu',
+#                  norm=None):
+#         super().__init__()
+#         blocks = []
+
+#         filter_t, pad_t = stride_t * 2, stride_t // 2
+#         blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
+#         blocks.append(nn.ReLU())
+#         for i in range(down_t):
+#             out_dim = width
+#             block = nn.Sequential(
+#                 Resnet1D(width,
+#                          depth,
+#                          dilation_growth_rate,
+#                          reverse_dilation=True,
+#                          activation=activation,
+#                          norm=norm), nn.Upsample(scale_factor=2,
+#                                                  mode='nearest'),
+#                 nn.Conv1d(width, out_dim, 3, 1, 1))
+#             blocks.append(block)
+#         blocks.append(nn.Conv1d(width, width, 3, 1, 1))
+#         blocks.append(nn.ReLU())
+#         blocks.append(nn.Conv1d(width, input_emb_width, 3, 1, 1))
+#         self.model = nn.Sequential(*blocks)
+
+#     def forward(self, x):
+#         x = self.model(x)
+#         return x
+
+
+class Decoder(nn.Module):
+
+    def __init__(self,
+                 input_emb_width=(UBODY_nfeats, LBODY_nfeats),
+                 output_emb_width=512,
+                 down_t=3,
+                 stride_t=2,
+                 width=512,
+                 depth=3,
+                 dilation_growth_rate=3,
+                 activation='relu',
+                 norm=None):
+        super().__init__()
+        
+        ubody_blocks, lbody_blocks = [], []
+
+        ubody_blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
+        ubody_blocks.append(nn.ReLU())
+        lbody_blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
+        lbody_blocks.append(nn.ReLU())
+
         for i in range(down_t):
             out_dim = width
-            block = nn.Sequential(
+            ubody_block = nn.Sequential(
                 Resnet1D(width,
                          depth,
                          dilation_growth_rate,
@@ -404,105 +447,62 @@ class Decoder(nn.Module):
                          norm=norm), nn.Upsample(scale_factor=2,
                                                  mode='nearest'),
                 nn.Conv1d(width, out_dim, 3, 1, 1))
-            blocks.append(block)
-        blocks.append(nn.Conv1d(width, width, 3, 1, 1))
-        blocks.append(nn.ReLU())
-        blocks.append(nn.Conv1d(width, input_emb_width, 3, 1, 1))
-        self.model = nn.Sequential(*blocks)
+            ubody_blocks.append(ubody_block)
 
-    def forward(self, x):
-        x = self.model(x)
-        return x
+            lbody_block = nn.Sequential(
+                Resnet1D(width,
+                         depth,
+                         dilation_growth_rate,
+                         reverse_dilation=True,
+                         activation=activation,
+                         norm=norm), nn.Upsample(scale_factor=2,
+                                                 mode='nearest'),
+                nn.Conv1d(width, out_dim, 3, 1, 1))
+            lbody_blocks.append(lbody_block)
 
+        ubody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
+        ubody_blocks.append(nn.ReLU())
+        ubody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
+        self.ubody_model = nn.Sequential(*ubody_blocks)
 
-# class Decoder(nn.Module):
+        lbody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
+        lbody_blocks.append(nn.ReLU())
+        lbody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
+        self.lbody_model = nn.Sequential(*lbody_blocks)
 
-#     def __init__(self,
-#                  input_emb_width=(UBODY_nfeats, LBODY_nfeats),
-#                  output_emb_width=512,
-#                  down_t=3,
-#                  stride_t=2,
-#                  width=512,
-#                  depth=3,
-#                  dilation_growth_rate=3,
-#                  activation='relu',
-#                  norm=None):
-#         super().__init__()
-        
-#         ubody_blocks, lbody_blocks = [], []
+        self.gcn_out_dim = max(input_emb_width)
+        self.gcn = GCNConv(width, self.gcn_out_dim)
+        self.edge_idx = torch.tensor([[0, 1], [1, 0]])
 
-#         ubody_blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
-#         ubody_blocks.append(nn.ReLU())
-#         lbody_blocks.append(nn.Conv1d(output_emb_width, width, 3, 1, 1))
-#         lbody_blocks.append(nn.ReLU())
-
-#         for i in range(down_t):
-#             out_dim = width
-#             ubody_block = nn.Sequential(
-#                 Resnet1D(width,
-#                          depth,
-#                          dilation_growth_rate,
-#                          reverse_dilation=True,
-#                          activation=activation,
-#                          norm=norm), nn.Upsample(scale_factor=2,
-#                                                  mode='nearest'),
-#                 nn.Conv1d(width, out_dim, 3, 1, 1))
-#             ubody_blocks.append(ubody_block)
-
-#             lbody_block = nn.Sequential(
-#                 Resnet1D(width,
-#                          depth,
-#                          dilation_growth_rate,
-#                          reverse_dilation=True,
-#                          activation=activation,
-#                          norm=norm), nn.Upsample(scale_factor=2,
-#                                                  mode='nearest'),
-#                 nn.Conv1d(width, out_dim, 3, 1, 1))
-#             lbody_blocks.append(lbody_block)
-
-#         ubody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
-#         ubody_blocks.append(nn.ReLU())
-#         ubody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
-#         self.ubody_model = nn.Sequential(*ubody_blocks)
-
-#         lbody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
-#         lbody_blocks.append(nn.ReLU())
-#         lbody_blocks.append(nn.Conv1d(width, width, 3, 1, 1))
-#         self.lbody_model = nn.Sequential(*lbody_blocks)
-
-#         self.gcn_out_dim = max(input_emb_width)
-#         self.gcn = GCNConv(width, self.gcn_out_dim)
-#         self.edge_idx = torch.tensor([[0, 1], [1, 0]])
-
-#         self.ubody_conv = nn.Conv1d(self.gcn_out_dim, input_emb_width[0], 3, 1, 1)
-#         self.lbody_conv = nn.Conv1d(self.gcn_out_dim, input_emb_width[1], 3, 1, 1)
+        self.ubody_conv = nn.Conv1d(self.gcn_out_dim, input_emb_width[0], 3, 1, 1)
+        self.lbody_conv = nn.Conv1d(self.gcn_out_dim, input_emb_width[1], 3, 1, 1)
 
         
-#     def forward(self, ux, lx):
+    def forward(self, ux, lx):
         
-#         ux_decoder = self.ubody_model(ux) # (bs, 512, T)
-#         lx_decoder = self.lbody_model(lx) # (bs, 512, T)
+        ux_decoder = self.ubody_model(ux) # (bs, 512, T)
+        lx_decoder = self.lbody_model(lx) # (bs, 512, T)
 
-#         x = torch.cat([ux_decoder.unsqueeze(1), lx_decoder.unsqueeze(1)], dim=1) # (bs, 2, 512, T)
+        x = torch.cat([ux_decoder.unsqueeze(1), lx_decoder.unsqueeze(1)], dim=1) # (bs, 2, 512, T)
 
-#         bs, _, n, t = x.shape
+        bs, _, n, t = x.shape
 
-#         gcn_out = []
-#         for i in range(t):
-#             x_t = x[:, :, :, i]
-#             x_t = x_t.view(-1, n)
-#             try:
-#                 x_t = self.gcn(x_t, self.edge_idx)
-#             except:
-#                 self.gcn.to(x_t.device)
-#                 self.edge_idx = self.edge_idx.to(x_t.device)
-#                 x_t = self.gcn(x_t, self.edge_idx)
+        gcn_out = []
+        for i in range(t):
+            x_t = x[:, :, :, i]
+            x_t = x_t.view(-1, n)
+            try:
+                x_t = self.gcn(x_t, self.edge_idx)
+            except:
+                self.gcn.to(x_t.device)
+                self.edge_idx = self.edge_idx.to(x_t.device)
+                x_t = self.gcn(x_t, self.edge_idx)
 
-#             gcn_out.append(x_t.view(bs, 2, self.gcn_out_dim))
+            gcn_out.append(x_t.view(bs, 2, self.gcn_out_dim))
 
-#         gcn_out = torch.stack(gcn_out, dim=-1) # (bs, 2, 163, T)
+        gcn_out = torch.stack(gcn_out, dim=-1) # (bs, 2, 163, T)
                 
-#         ux = self.ubody_conv(gcn_out[:, 0, :, :])
-#         lx = self.lbody_conv(gcn_out[:, 1, :, :])
+        ux = self.ubody_conv(gcn_out[:, 0, :, :])
+        lx = self.lbody_conv(gcn_out[:, 1, :, :])
 
-#         return ux, lx
+        return ux, lx
